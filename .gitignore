@@ -1,0 +1,36 @@
+# --- 编译产物 ---
+# 常见的二进制文件名
+main
+main.exe
+AI_Chat
+AI_Chat.exe
+*.test
+*.out
+
+# --- 日志文件 ---
+# 忽略 logs 文件夹下的所有日志
+logs/*.log
+# 额外忽略可能出现在根目录的日志
+*.log
+
+# --- 配置文件 (敏感信息) ---
+# 如果你的 yaml 中包含数据库密码，建议忽略
+# 团队开发通常会提交一个 mysql.yaml.example 模板，而忽略真实的 mysql.yaml
+configs/mysql.yaml
+configs/redis.yaml
+
+# --- 依赖管理 ---
+# Go 的依赖通常不提交 vendor 目录（除非你明确使用 vendor 模式）
+# vendor/
+
+# --- 操作系统相关 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE 缓存 ---
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.exe_
