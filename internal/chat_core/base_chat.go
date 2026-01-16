@@ -1,0 +1,60 @@
+package chat_core
+
+import (
+	"AI_Chat/internal/model"
+	"AI_Chat/pkg/ai_config"
+
+	"github.com/cloudwego/eino-ext/components/model/deepseek"
+	"github.com/cloudwego/eino/components/prompt"
+	"github.com/cloudwego/eino/schema"
+	"github.com/gin-gonic/gin"
+)
+
+func Chat(c *gin.Context, query string, history []model.Message, system_prompt string) (string, error) {
+	cm, err := deepseek.NewChatModel(c, &deepseek.ChatModelConfig{
+		APIKey:  ai_config.DeepSeekChatConfig.APIKey,
+		Model:   ai_config.DeepSeekChatConfig.Model,
+		BaseURL: ai_config.DeepSeekChatConfig.BaseURL,
+	})
+	historyMessages := make([]*schema.Message, 0)
+	for _, message := range history {
+		switch message.Role {
+		case "user":
+			historyMessages = append(historyMessages, &schema.Message{
+				Role:    schema.User,
+				Content: message.Content,
+			})
+		case "assistant":
+			historyMessages = append(historyMessages, &schema.Message{
+				Role:    schema.Assistant,
+				Content: message.Content,
+			})
+		case "system":
+			historyMessages = append(historyMessages, &schema.Message{
+				Role:    schema.System,
+				Content: message.Content,
+			})
+		}
+	}
+	template := prompt.FromMessages(schema.FString,
+		// 系统消息模板
+		schema.SystemMessage(system_prompt),
+
+		// 插入需要的对话历史（新对话的话这里不填）
+		schema.MessagesPlaceholder("chat_history", true),
+
+		// 用户消息模板
+		schema.UserMessage(query),
+	)
+	messages, err := template.Format(c, map[string]any{
+		"chat_history": historyMessages,
+	})
+	if err != nil {
+		return "格式化出错，请检查格式", err
+	}
+	resp, err := cm.Generate(c, messages)
+	if err != nil {
+		return "生成出错，请检查配置文件或网络", err
+	}
+	return resp.Content, nil
+}

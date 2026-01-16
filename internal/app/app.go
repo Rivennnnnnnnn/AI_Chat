@@ -16,6 +16,7 @@ type app struct {
 	router             *gin.Engine
 	authHandler        *handler.AuthHandler
 	testHandler        *handler.TestHandler
+	chatHandler        *handler.ChatHandler
 	privateInterceptor []gin.HandlerFunc
 }
 
@@ -39,6 +40,11 @@ func InitRouter() *gin.Engine {
 		private := root.Group("/", App.privateInterceptor...)
 		{
 			private.POST("/test", App.testHandler.Test)
+			chatGroup := private.Group("/ai")
+			{
+				chatGroup.POST("/create-conversation", App.chatHandler.CreateConversation)
+				chatGroup.POST("/chat", App.chatHandler.Chat)
+			}
 		}
 
 	}
@@ -83,12 +89,14 @@ func Init() {
 
 	userBaseRepository := repository.NewUserBaseRepository(db.DB)
 	userSessionRepository := repository.NewUserSessionRepository(db.RedisClient)
+	conversationRepository := repository.NewConversationRepository(db.DB)
 
 	authHandler := handler.NewAuthHandler(userBaseRepository, userSessionRepository)
 	testHandler := handler.NewTestHandler()
-
+	chatHandler := handler.NewChatHandler(conversationRepository)
 	App.authHandler = authHandler
 	App.testHandler = testHandler
+	App.chatHandler = chatHandler
 
 	//初始化Interceptor
 

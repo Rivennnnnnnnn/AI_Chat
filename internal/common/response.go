@@ -14,6 +14,7 @@ const (
 	DataBaseFailedCode = 1003
 	RedisFailedCode    = 1004
 	SessionExpiredCode = 1005
+	ChatFailedCode     = 1006
 )
 
 func GetMessage(code int) string {
@@ -32,6 +33,8 @@ func GetMessage(code int) string {
 		return "redis连接失败或错误"
 	case SessionExpiredCode:
 		return "会话已过期，请重新登录"
+	case ChatFailedCode:
+		return "聊天失败，请检查配置文件或网络"
 	}
 	return "未知错误"
 }

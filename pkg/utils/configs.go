@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"AI_Chat/pkg/ai_config"
 	"errors"
 	"path/filepath"
 	"runtime"
@@ -42,10 +43,12 @@ func (c *Config) GetRedisConfig() RedisConfig {
 func (c *Config) SetRedisConfig(redisConfig RedisConfig) {
 	c.Redis = redisConfig
 }
+
 // 全局变量声明
 var config_names []string = []string{
 	"mysql",
 	"redis",
+	"chat",
 }
 var config_names_flag map[string]bool = map[string]bool{}
 
@@ -99,7 +102,15 @@ func InitConfig() error {
 			if redisConfig.Host == "" || redisConfig.Port == 0 {
 				return errors.New("redis配置文件错误: 请检查配置文件是否正确,必要配置项（host,port）不能为空\n")
 			}
-			Config_Instance.SetRedisConfig(redisConfig)	
+			Config_Instance.SetRedisConfig(redisConfig)
+		case "chat":
+			viper.SetDefault("DeepSeek.base_url", "https://api.deepseek.com")
+			viper.SetDefault("DeepSeek.model", "deepseek-chat")
+			ai_config.DeepSeekChatConfig = ai_config.DeepSeekChatModel{
+				Model:   viper.GetString("DeepSeek.model"),
+				BaseURL: viper.GetString("DeepSeek.base_url"),
+				APIKey:  viper.GetString("DeepSeek.api_key"),
+			}
 		}
 	}
 	return nil
