@@ -29,7 +29,7 @@ func InitDB(cfg utils.MysqlConfig) (*gorm.DB, error) {
 	// 实际开发中，这些参数应该从配置文件读取
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName)
-	newLogger := logger.Default.LogMode(logger.Info)
+	newLogger := logger.Default.LogMode(logger.Error)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: newLogger, // 设置日志
 	})

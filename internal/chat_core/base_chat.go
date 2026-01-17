@@ -16,6 +16,10 @@ func Chat(c *gin.Context, query string, history []model.Message, system_prompt s
 		Model:   ai_config.DeepSeekChatConfig.Model,
 		BaseURL: ai_config.DeepSeekChatConfig.BaseURL,
 	})
+	// sort.Slice(history, func(i, j int) bool {
+	// 	return history[i].CreatedAt.Before(history[j].CreatedAt)
+	// })
+	//带历史记录的聊天
 	historyMessages := make([]*schema.Message, 0)
 	for _, message := range history {
 		switch message.Role {

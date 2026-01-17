@@ -37,6 +37,14 @@ export const chatApi = {
   // 发送消息
   sendMessage: (query: string, conversationId: string, systemPrompt: string = '你是一个专业的 AI 助手。') => 
     api.post('/ai/chat', { query, conversationId, systemPrompt }),
+
+  // 获取对话列表
+  getConversations: () => 
+    api.get('/ai/conversations'),
+
+  // 获取对话消息历史
+  getConversationMessages: (conversationId: string) => 
+    api.post('/ai/conversation-messages', { conversationId }),
 };
 
 export default api;

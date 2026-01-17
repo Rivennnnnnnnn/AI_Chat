@@ -168,7 +168,7 @@
 
 ---
 
-## AI 聊天接口 (AI Chat) [对接中]
+## AI 聊天接口 (AI Chat) [已对接]
 
 所有 AI 接口均需要登录后调用，并在 Header 中携带 `SessionId`。
 
@@ -214,6 +214,70 @@
     "message": "success",
     "data": {
         "message": "你好！我是你的 AI 助手..."
+    }
+}
+```
+
+### 3. 获取对话列表 [已对接]
+获取当前用户的所有聊天对话。
+
+- **接口地址**: `/ai/conversations`
+- **请求方法**: `GET`
+
+- **响应示例 (成功)**:
+```json
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "conversations": [
+            {
+                "id": "con:xxxx-xxxx-xxxx",
+                "userId": 1,
+                "title": "关于 Go 排序的讨论",
+                "createdAt": "2026-01-18T10:00:00Z",
+                "updatedAt": "2026-01-18T10:00:00Z"
+            }
+        ]
+    }
+}
+```
+
+### 4. 获取对话历史消息 [已对接]
+获取指定对话的所有历史消息记录。
+
+- **接口地址**: `/ai/conversation-messages`
+- **请求方法**: `POST`
+- **请求参数 (JSON)**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| conversationId | string | 是 | 对话 ID |
+
+- **响应示例 (成功)**:
+```json
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "messages": [
+            {
+                "id": "msg:xxxx-xxxx-xxxx",
+                "conversationId": "con:xxxx-xxxx-xxxx",
+                "role": "user",
+                "content": "你好",
+                "model": "deepseek-chat",
+                "createdAt": "2026-01-18T10:00:00Z"
+            },
+            {
+                "id": "msg:yyyy-yyyy-yyyy",
+                "conversationId": "con:xxxx-xxxx-xxxx",
+                "role": "assistant",
+                "content": "你好！有什么我可以帮你的吗？",
+                "model": "deepseek-chat",
+                "createdAt": "2026-01-18T10:00:05Z"
+            }
+        ]
     }
 }
 ```

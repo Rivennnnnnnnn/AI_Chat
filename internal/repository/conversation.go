@@ -25,14 +25,14 @@ func (r *ConversationRepository) GetConversationById(id string) (*model.Conversa
 }
 func (r *ConversationRepository) GetConversationsByUserId(userId int64) ([]model.Conversation, error) {
 	var conversations []model.Conversation
-	if err := r.db.Where("user_id = ?", userId).Find(&conversations).Error; err != nil {
+	if err := r.db.Where("user_id = ?", userId).Order("created_at DESC").Find(&conversations).Error; err != nil {
 		return nil, err
 	}
 	return conversations, nil
 }
 func (r *ConversationRepository) GetMessagesByConversationId(conversationId string) ([]model.Message, error) {
 	var messages []model.Message
-	if err := r.db.Where("conversation_id = ?", conversationId).Find(&messages).Error; err != nil {
+	if err := r.db.Where("conversation_id = ?", conversationId).Order("order_id ASC").Find(&messages).Error; err != nil {
 		return nil, err
 	}
 	return messages, nil

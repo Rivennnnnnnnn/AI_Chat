@@ -25,6 +25,7 @@ func (c *Conversation) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 type Message struct {
+	OrderID        int64     `gorm:"autoIncrement;not null;index" json:"orderId"`
 	ID             string    `gorm:"primaryKey" json:"id"`
 	ConversationID string    `gorm:"not null;index" json:"conversationId"`
 	Role           string    `gorm:"type:varchar(20);not null" json:"role"` // user, assistant, system

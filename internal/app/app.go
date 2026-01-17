@@ -44,6 +44,8 @@ func InitRouter() *gin.Engine {
 			{
 				chatGroup.POST("/create-conversation", App.chatHandler.CreateConversation)
 				chatGroup.POST("/chat", App.chatHandler.Chat)
+				chatGroup.GET("/conversations", App.chatHandler.GetConversations)
+				chatGroup.POST("/conversation-messages", App.chatHandler.GetConversationMessages)
 			}
 		}
 

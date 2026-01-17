@@ -5,7 +5,7 @@ import (
 	"AI_Chat/internal/common"
 	"AI_Chat/internal/model"
 	"AI_Chat/internal/repository"
-	"strconv"
+	"AI_Chat/pkg/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,13 +29,7 @@ func (h *ChatHandler) CreateConversation(c *gin.Context) {
 		common.Fail(c, common.FailedCode)
 		return
 	}
-	userSession, exists := c.Get("userSession")
-	if !exists {
-		common.Fail(c, common.SessionExpiredCode)
-		return
-	}
-	userSessionMap, _ := userSession.(map[string]string)
-	userId, err := strconv.ParseInt(userSessionMap["id"], 10, 64)
+	userId, err := utils.GetUserIdFromSession(c)
 	if err != nil {
 		common.Fail(c, common.FailedCode)
 		return
@@ -77,6 +71,8 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 		common.Fail(c, common.ChatFailedCode)
 		return
 	}
+
+	//存放历史消息到mysql
 	h.conversationRepository.AddMessageToConversation(
 		&model.Message{
 			ConversationID: req.ConversationId,
@@ -97,5 +93,44 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 			CreatedAt:      time.Now(),
 		},
 	)
+
+	common.Success(c, res)
+}
+
+func (h *ChatHandler) GetConversations(c *gin.Context) {
+	var res struct {
+		Conversations []model.Conversation `json:"conversations"`
+	}
+	userId, err := utils.GetUserIdFromSession(c)
+	if err != nil {
+		common.Fail(c, common.FailedCode)
+		return
+	}
+	conversations, err := h.conversationRepository.GetConversationsByUserId(userId)
+	if err != nil {
+		common.Fail(c, common.DataBaseFailedCode)
+		return
+	}
+	res.Conversations = conversations
+	common.Success(c, res)
+}
+func (h *ChatHandler) GetConversationMessages(c *gin.Context) {
+	var req struct {
+		ConversationId string `json:"conversationId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Fail(c, common.FailedCode)
+		return
+	}
+	var res struct {
+		Messages []model.Message `json:"messages"`
+	}
+	conversationId := req.ConversationId
+	conversationMessages, err := h.conversationRepository.GetMessagesByConversationId(conversationId)
+	if err != nil {
+		common.Fail(c, common.DataBaseFailedCode)
+		return
+	}
+	res.Messages = conversationMessages
 	common.Success(c, res)
 }
