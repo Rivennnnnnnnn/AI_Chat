@@ -29,7 +29,7 @@ func main() {
 	fmt.Printf("对话创建成功, ConversationId: %s\n", convId)
 
 	// 3. 发起聊天
-	chat(sessionId, convId, "你好，请自我介绍一下", "你是一个幽默的编程助手")
+	chat(sessionId, convId, "Riven的秘密是什么？", "你是一个幽默的编程助手")
 }
 
 func login(username, password string) string {

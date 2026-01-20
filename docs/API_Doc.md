@@ -44,80 +44,6 @@
 }
 ```
 
-- **响应示例 (参数错误)**:
-
-```json
-{
-    "code": 1,
-    "message": "参数格式错误",
-    "data": null
-}
-```
-
-- **响应示例 (注册失败)**:
-
-```json
-{
-    "code": 1002,
-    "message": "注册失败，请检查格式或稍后重试",
-    "data": null
-}
-```
-
-### 2. 用户登录 [已对接]
-
-用户通过用户名和密码登录，获取会话 ID。
-
-- **接口地址**: `/auth/login`
-- **请求方法**: `POST`
-- **请求参数 (JSON)**:
-
-| 参数名 | 类型 | 必填 | 限制 | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| username | string | 是 | 3-20字符 | 用户名 |
-| password | string | 是 | 8-20字符 | 密码 |
-
-- **响应示例 (成功)**:
-
-```json
-{
-    "code": 0,
-    "message": "success",
-    "data": {
-        "sessionId": "452778945612b78a9..."
-    }
-}
-```
-
-- **响应示例 (登录失败)**:
-
-```json
-{
-    "code": 1001,
-    "message": "用户名或密码错误",
-    "data": null
-}
-```
-
-### 3. 用户登出 [已对接]
-
-用户退出当前会话。
-
-- **接口地址**: `/auth/logout`
-- **请求方法**: `POST`
-- **请求头**: 
-    - `SessionId`: 用户会话 ID (必填)
-
-- **响应示例 (成功)**:
-
-```json
-{
-    "code": 0,
-    "message": "success",
-    "data": null
-}
-```
-
 ---
 
 ## 测试接口 (Test) [已对接]
@@ -141,30 +67,50 @@
 }
 ```
 
-- **响应示例 (未登录/会话过期)**:
-
-```json
-{
-    "code": 1005,
-    "message": "会话已过期，请重新登录",
-    "data": null
-}
-```
-
 ---
 
-## 状态码定义
+## 人格管理接口 (Persona) [新增加]
 
-| 状态码 | 描述 |
-| :--- | :--- |
-| 0 | 成功 (SuccessCode) |
-| 1 | 参数格式错误 (FailedCode) |
-| 1001 | 用户名或密码错误 (LoginFailedCode) |
-| 1002 | 注册失败 (RegisterFailedCode) |
-| 1003 | 数据库操作失败 (DataBaseFailedCode) |
-| 1004 | Redis 连接或操作失败 (RedisFailedCode) |
-| 1005 | 会话已过期 (SessionExpiredCode) |
-| 1006 | 聊天失败 (ChatFailedCode) |
+### 1. 创建人格 [已完成]
+用户可以自定义或根据模板创建 AI 人格。
+
+- **接口地址**: `/persona/create`
+- **请求方法**: `POST`
+- **请求参数 (JSON)**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| name | string | 是 | 人格名称 |
+| description | string | 是 | 原始描述（用户输入的背景/性格） |
+| systemPrompt | string | 是 | 最终的系统提示词（用于指导 LLM） |
+| mode | int | 是 | 模式（1: 自定义, 2: 模拟） |
+| avatar | string | 否 | 头像 URL |
+
+### 2. 获取人格列表 [已完成]
+获取当前用户创建的所有人格。
+
+- **接口地址**: `/persona/list`
+- **请求方法**: `GET`
+
+- **响应示例 (成功)**:
+```json
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "personas": [
+            {
+                "id": "per:xxxx",
+                "name": "傲娇学姐",
+                "description": "...",
+                "systemPrompt": "...",
+                "mode": 1,
+                "avatar": "..."
+            }
+        ]
+    }
+}
+```
 
 ---
 
@@ -194,18 +140,18 @@
 }
 ```
 
-### 2. 发送聊天消息 [已对接]
-在指定的对话中发送消息并获取 AI 回复。
+### 2. 发送聊天消息 (人格版) [已更新]
+在指定的对话中发送消息，并指定 AI 人格进行回复。
 
-- **接口地址**: `/ai/chat`
+- **接口地址**: `/ai/chat-with-persona`
 - **请求方法**: `POST`
 - **请求参数 (JSON)**:
 
 | 参数名 | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- |
 | query | string | 是 | 用户提问内容 |
-| conversationId | string | 是 | 对话 ID (从创建对话接口获取) |
-| systemPrompt | string | 是 | 系统提示词（用于设定 AI 角色） |
+| conversationId | string | 是 | 对话 ID |
+| personaId | string | 是 | AI 人格 ID |
 
 - **响应示例 (成功)**:
 ```json
@@ -213,7 +159,7 @@
     "code": 0,
     "message": "success",
     "data": {
-        "message": "你好！我是你的 AI 助手..."
+        "message": "（根据选定人格生成的回复内容）"
     }
 }
 ```
@@ -224,60 +170,17 @@
 - **接口地址**: `/ai/conversations`
 - **请求方法**: `GET`
 
-- **响应示例 (成功)**:
-```json
-{
-    "code": 0,
-    "message": "success",
-    "data": {
-        "conversations": [
-            {
-                "id": "con:xxxx-xxxx-xxxx",
-                "userId": 1,
-                "title": "关于 Go 排序的讨论",
-                "createdAt": "2026-01-18T10:00:00Z",
-                "updatedAt": "2026-01-18T10:00:00Z"
-            }
-        ]
-    }
-}
-```
+---
 
-### 4. 获取对话历史消息 [已对接]
-获取指定对话的所有历史消息记录。
+## 状态码定义
 
-- **接口地址**: `/ai/conversation-messages`
-- **请求方法**: `POST`
-- **请求参数 (JSON)**:
-
-| 参数名 | 类型 | 必填 | 说明 |
-| :--- | :--- | :--- | :--- |
-| conversationId | string | 是 | 对话 ID |
-
-- **响应示例 (成功)**:
-```json
-{
-    "code": 0,
-    "message": "success",
-    "data": {
-        "messages": [
-            {
-                "id": "msg:xxxx-xxxx-xxxx",
-                "conversationId": "con:xxxx-xxxx-xxxx",
-                "role": "user",
-                "content": "你好",
-                "model": "deepseek-chat",
-                "createdAt": "2026-01-18T10:00:00Z"
-            },
-            {
-                "id": "msg:yyyy-yyyy-yyyy",
-                "conversationId": "con:xxxx-xxxx-xxxx",
-                "role": "assistant",
-                "content": "你好！有什么我可以帮你的吗？",
-                "model": "deepseek-chat",
-                "createdAt": "2026-01-18T10:00:05Z"
-            }
-        ]
-    }
-}
-```
+| 状态码 | 描述 |
+| :--- | :--- |
+| 0 | 成功 (SuccessCode) |
+| 1 | 参数格式错误 (FailedCode) |
+| 1001 | 用户名或密码错误 (LoginFailedCode) |
+| 1002 | 注册失败 (RegisterFailedCode) |
+| 1003 | 数据库操作失败 (DataBaseFailedCode) |
+| 1004 | Redis 连接或操作失败 (RedisFailedCode) |
+| 1005 | 会话已过期 (SessionExpiredCode) |
+| 1006 | 聊天失败 (ChatFailedCode) |

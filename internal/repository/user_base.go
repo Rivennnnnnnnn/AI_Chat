@@ -23,3 +23,11 @@ func (r *UserBaseRepository) GetUserBaseByUsername(username string) (*model.User
 	}
 	return &userBase, nil
 }
+func (r *UserBaseRepository) FindByID(id int64) (*model.UserBase, error) {
+	var userBase model.UserBase
+	if err := r.db.Where("id = ?", id).Find(&userBase).Error; err != nil {
+		return nil, err
+	}
+	return &userBase, nil
+}
+

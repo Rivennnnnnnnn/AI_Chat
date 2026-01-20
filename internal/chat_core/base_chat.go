@@ -1,11 +1,15 @@
 package chat_core
 
 import (
+	_ "AI_Chat/internal/chat_core/llm_tools"
 	"AI_Chat/internal/model"
 	"AI_Chat/pkg/ai_config"
 
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/components/prompt"
+	_ "github.com/cloudwego/eino/components/tool"
+	_ "github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gin-gonic/gin"
 )
@@ -16,6 +20,17 @@ func Chat(c *gin.Context, query string, history []model.Message, system_prompt s
 		Model:   ai_config.DeepSeekChatConfig.Model,
 		BaseURL: ai_config.DeepSeekChatConfig.BaseURL,
 	})
+	// mytool, err := llm_tools.NewGetSecretTool()
+	// tools := compose.ToolsNodeConfig{
+	// 	Tools: []tool.BaseTool{mytool},
+	// }
+	agent, err := react.NewAgent(c, &react.AgentConfig{
+		ToolCallingModel: cm,
+		MaxStep:          5,
+	})
+	if err != nil {
+		return "Agent创建出错", err
+	}
 	// sort.Slice(history, func(i, j int) bool {
 	// 	return history[i].CreatedAt.Before(history[j].CreatedAt)
 	// })
@@ -56,7 +71,7 @@ func Chat(c *gin.Context, query string, history []model.Message, system_prompt s
 	if err != nil {
 		return "格式化出错，请检查格式", err
 	}
-	resp, err := cm.Generate(c, messages)
+	resp, err := agent.Generate(c, messages)
 	if err != nil {
 		return "生成出错，请检查配置文件或网络", err
 	}

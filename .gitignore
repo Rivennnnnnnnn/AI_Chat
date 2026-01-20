@@ -18,6 +18,7 @@ logs/*.log
 # 团队开发通常会提交一个 mysql.yaml.example 模板，而忽略真实的 mysql.yaml
 configs/mysql.yaml
 configs/redis.yaml
+configs/chat.yaml
 
 # --- 依赖管理 ---
 # Go 的依赖通常不提交 vendor 目录（除非你明确使用 vendor 模式）

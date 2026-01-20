@@ -15,6 +15,7 @@ const (
 	RedisFailedCode    = 1004
 	SessionExpiredCode = 1005
 	ChatFailedCode     = 1006
+	UserNotFoundCode   = 1007
 )
 
 func GetMessage(code int) string {
@@ -35,6 +36,8 @@ func GetMessage(code int) string {
 		return "会话已过期，请重新登录"
 	case ChatFailedCode:
 		return "聊天失败，请检查配置文件或网络"
+	case UserNotFoundCode:
+		return "用户不存在或已被注销"
 	}
 	return "未知错误"
 }

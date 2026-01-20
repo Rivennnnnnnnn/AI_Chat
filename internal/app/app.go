@@ -17,6 +17,7 @@ type app struct {
 	authHandler        *handler.AuthHandler
 	testHandler        *handler.TestHandler
 	chatHandler        *handler.ChatHandler
+	personaHandler     *handler.PersonaHandler
 	privateInterceptor []gin.HandlerFunc
 }
 
@@ -43,9 +44,14 @@ func InitRouter() *gin.Engine {
 			chatGroup := private.Group("/ai")
 			{
 				chatGroup.POST("/create-conversation", App.chatHandler.CreateConversation)
-				chatGroup.POST("/chat", App.chatHandler.Chat)
+				chatGroup.POST("/chat-with-persona", App.chatHandler.ChatWithPersona)
 				chatGroup.GET("/conversations", App.chatHandler.GetConversations)
 				chatGroup.POST("/conversation-messages", App.chatHandler.GetConversationMessages)
+			}
+			personaGroup := private.Group("/persona")
+			{
+				personaGroup.POST("/create", App.personaHandler.CreatePersona)
+				personaGroup.GET("/list", App.personaHandler.GetPersonas)
 			}
 		}
 
@@ -92,18 +98,20 @@ func Init() {
 	userBaseRepository := repository.NewUserBaseRepository(db.DB)
 	userSessionRepository := repository.NewUserSessionRepository(db.RedisClient)
 	conversationRepository := repository.NewConversationRepository(db.DB)
+	personaRepository := repository.NewPersonaRepository(db.DB)
 
 	authHandler := handler.NewAuthHandler(userBaseRepository, userSessionRepository)
 	testHandler := handler.NewTestHandler()
-	chatHandler := handler.NewChatHandler(conversationRepository)
+	chatHandler := handler.NewChatHandler(conversationRepository, personaRepository)
+	personaHandler := handler.NewPersonaHandler(personaRepository)
 	App.authHandler = authHandler
 	App.testHandler = testHandler
 	App.chatHandler = chatHandler
-
+	App.personaHandler = personaHandler
 	//初始化Interceptor
 
 	privateInterceptor := []gin.HandlerFunc{
-		middleware.Auth(userSessionRepository),
+		middleware.Auth(userSessionRepository, userBaseRepository),
 	}
 	App.privateInterceptor = privateInterceptor
 

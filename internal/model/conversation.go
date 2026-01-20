@@ -10,6 +10,7 @@ import (
 type Conversation struct {
 	ID        string    `gorm:"primaryKey;type:varchar(36)" json:"id"`
 	UserID    int64     `gorm:"not null;index" json:"userId"`
+	PersonaID string    `gorm:"index" json:"personaId"`
 	Title     string    `gorm:"size:255" json:"title"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`

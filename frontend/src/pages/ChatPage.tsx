@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LogOut, Send, Bot, User, Settings, TestTube, PlusCircle, Loader2, MessageSquare } from 'lucide-react';
+import { LogOut, Send, Bot, User, Settings, TestTube, PlusCircle, Loader2, MessageSquare, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
-import api, { chatApi } from '../services/api';
+import api, { chatApi, personaApi } from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -17,7 +17,17 @@ interface Message {
 interface Conversation {
   id: string;
   title: string;
+  personaId?: string;
   createdAt: string;
+}
+
+interface Persona {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  mode: number;
+  avatar: string;
 }
 
 const ChatPage: React.FC = () => {
@@ -36,14 +46,28 @@ const ChatPage: React.FC = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Persona state
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+  const [isLoadingPersonas, setIsLoadingPersonas] = useState(false);
+  const [showCreatePersona, setShowCreatePersona] = useState(false);
+  const [newPersona, setNewPersona] = useState({
+    name: '',
+    description: '',
+    systemPrompt: '',
+    mode: 1,
+    avatar: ''
+  });
+
   // Auto scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load conversations on mount
+  // Load conversations and personas on mount
   useEffect(() => {
     fetchConversations();
+    fetchPersonas();
   }, []);
 
   const fetchConversations = async () => {
@@ -57,13 +81,52 @@ const ChatPage: React.FC = () => {
     }
   };
 
-  const loadConversationHistory = async (id: string) => {
-    if (id === conversationId) return;
+  const fetchPersonas = async () => {
+    setIsLoadingPersonas(true);
+    try {
+      const res = await personaApi.getPersonas();
+      if (res.data.code === 0) {
+        const list = res.data.data.personas || [];
+        setPersonas(list);
+        if (list.length > 0 && !selectedPersonaId) {
+          setSelectedPersonaId(list[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch personas', err);
+    } finally {
+      setIsLoadingPersonas(false);
+    }
+  };
+
+  const handleCreatePersona = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await personaApi.createPersona(newPersona);
+      if (res.data.code === 0) {
+        setTestResult('人格创建成功！');
+        setShowCreatePersona(false);
+        setNewPersona({ name: '', description: '', systemPrompt: '', mode: 1, avatar: '' });
+        fetchPersonas();
+      } else {
+        setTestResult(`创建失败: ${res.data.message}`);
+      }
+    } catch (err: any) {
+      setTestResult(`请求失败: ${err.message}`);
+    }
+  };
+
+  const loadConversationHistory = async (conv: Conversation) => {
+    if (conv.id === conversationId) return;
     
     setIsLoadingHistory(true);
-    setConversationId(id);
+    setConversationId(conv.id);
+    if (conv.personaId) {
+      setSelectedPersonaId(conv.personaId);
+    }
+    
     try {
-      const res = await chatApi.getConversationMessages(id);
+      const res = await chatApi.getConversationMessages(conv.id);
       if (res.data.code === 0) {
         setMessages(res.data.data.messages || []);
       } else {
@@ -88,19 +151,28 @@ const ChatPage: React.FC = () => {
   };
 
   const createNewConversation = async () => {
+    if (!selectedPersonaId) {
+      setTestResult('请先选择或创建一个 AI 人格');
+      return;
+    }
+
     setIsCreatingConv(true);
+    const selectedPersona = personas.find(p => p.id === selectedPersonaId);
+    const title = `与 ${selectedPersona?.name || 'AI'} 的新对话`;
+
     try {
-      const res = await chatApi.createConversation(`与 ${username} 的新对话`);
+      const res = await chatApi.createConversation(title);
       if (res.data.code === 0) {
-        const newConv = {
+        const newConv: Conversation = {
           id: res.data.data.conversationId,
-          title: `与 ${username} 的新对话`,
+          title: title,
+          personaId: selectedPersonaId,
           createdAt: new Date().toISOString()
         };
         setConversations(prev => [newConv, ...prev]);
         setConversationId(newConv.id);
         setMessages([]);
-        setTestResult('会话创建成功，可以开始聊天了！');
+        setTestResult('会话创建成功！');
       } else {
         setTestResult(`创建失败: ${res.data.message}`);
       }
@@ -115,17 +187,22 @@ const ChatPage: React.FC = () => {
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || isSending) return;
+    if (!selectedPersonaId) {
+      setTestResult('请先选择一个人格');
+      return;
+    }
 
     // If no conversation yet, create one first
     let currentConvId = conversationId;
     if (!currentConvId) {
       setIsCreatingConv(true);
+      const selectedPersona = personas.find(p => p.id === selectedPersonaId);
+      const title = `与 ${selectedPersona?.name || 'AI'} 的新对话`;
       try {
-        const res = await chatApi.createConversation(`与 ${username} 的新对话`);
+        const res = await chatApi.createConversation(title);
         if (res.data.code === 0) {
           currentConvId = res.data.data.conversationId;
           setConversationId(currentConvId);
-          // Refresh list to show new conversation
           fetchConversations();
         } else {
           setTestResult(`创建会话失败: ${res.data.message}`);
@@ -152,7 +229,7 @@ const ChatPage: React.FC = () => {
     setIsSending(true);
 
     try {
-      const res = await chatApi.sendMessage(input, currentConvId!);
+      const res = await chatApi.sendMessage(input, currentConvId!, selectedPersonaId);
       if (res.data.code === 0) {
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -199,11 +276,44 @@ const ChatPage: React.FC = () => {
         </div>
         
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-2 mb-2">人格选择</div>
+          <div className="space-y-1 mb-6">
+            {isLoadingPersonas ? (
+              <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-zinc-500" /></div>
+            ) : personas.length === 0 ? (
+              <div className="text-xs text-zinc-600 px-2 italic">暂无人格</div>
+            ) : (
+              <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1 pr-1">
+                {personas.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedPersonaId(p.id)}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-all ${
+                      selectedPersonaId === p.id 
+                        ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30 font-medium' 
+                        : 'text-zinc-500 hover:bg-zinc-800 border border-transparent hover:text-zinc-300'
+                    }`}
+                  >
+                    <Bot className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{p.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button 
+              onClick={() => setShowCreatePersona(true)}
+              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-zinc-500 hover:bg-zinc-800 transition-colors border border-dashed border-zinc-800 mt-2 group"
+            >
+              <PlusCircle className="h-3 w-3 group-hover:text-zinc-300" />
+              <span className="group-hover:text-zinc-300">新建人格</span>
+            </button>
+          </div>
+
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-2 mb-2">会话历史</div>
           <button 
             onClick={createNewConversation}
-            disabled={isCreatingConv}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 mb-4"
+            disabled={isCreatingConv || !selectedPersonaId}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-600 mb-4"
           >
             {isCreatingConv ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
             <span>新对话</span>
@@ -213,7 +323,7 @@ const ChatPage: React.FC = () => {
             {conversations.map((conv) => (
               <button
                 key={conv.id}
-                onClick={() => loadConversationHistory(conv.id)}
+                onClick={() => loadConversationHistory(conv)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
                   conversationId === conv.id 
                     ? 'bg-zinc-800 text-white' 
@@ -286,7 +396,7 @@ const ChatPage: React.FC = () => {
               <div className="max-w-md">
                 <h2 className="text-2xl font-bold mb-2">你好, {username}!</h2>
                 <p className="text-zinc-500">
-                  我是你的 AI 助手。你可以问我任何问题，或者从侧边栏选择一个历史对话。
+                  我是你的 AI 助手。请先从侧边栏选择或创建一个 **AI 人格**，然后开始对话。
                 </p>
               </div>
             </div>
@@ -391,14 +501,20 @@ const ChatPage: React.FC = () => {
                   handleSendMessage();
                 }
               }}
-              disabled={isSending || isCreatingConv}
-              placeholder={isCreatingConv ? "正在创建会话..." : "输入消息... (Shift+Enter 换行)"}
+              disabled={isSending || isCreatingConv || !selectedPersonaId}
+              placeholder={
+                isCreatingConv 
+                  ? "正在创建会话..." 
+                  : selectedPersonaId 
+                    ? `向 ${personas.find(p => p.id === selectedPersonaId)?.name} 发送消息...` 
+                    : "请先从左侧选择一个人格"
+              }
               className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl pl-6 pr-14 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-zinc-300 disabled:opacity-50 resize-none overflow-hidden"
               style={{ minHeight: '56px' }}
             />
             <button
               type="submit"
-              disabled={!input.trim() || isSending || isCreatingConv}
+              disabled={!input.trim() || isSending || isCreatingConv || !selectedPersonaId}
               className="absolute right-3 bottom-3 h-10 w-10 bg-blue-600 hover:bg-blue-500 rounded-xl flex items-center justify-center text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
@@ -409,6 +525,89 @@ const ChatPage: React.FC = () => {
           </p>
         </footer>
       </div>
+
+      {/* Create Persona Modal */}
+      {showCreatePersona && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+              <h2 className="text-xl font-bold">新建 AI 人格</h2>
+              <button onClick={() => setShowCreatePersona(false)} className="text-zinc-500 hover:text-white">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <form onSubmit={handleCreatePersona} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-500 uppercase">人格名称</label>
+                <input 
+                  required
+                  value={newPersona.name}
+                  onChange={e => setNewPersona({...newPersona, name: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none"
+                  placeholder="例如：高冷学姐"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-500 uppercase">原始描述</label>
+                <textarea 
+                  required
+                  value={newPersona.description}
+                  onChange={e => setNewPersona({...newPersona, description: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none min-h-[80px]"
+                  placeholder="简要描述这个人的性格、背景等..."
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-zinc-500 uppercase">System Prompt (核心设定)</label>
+                <textarea 
+                  required
+                  value={newPersona.systemPrompt}
+                  onChange={e => setNewPersona({...newPersona, systemPrompt: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none min-h-[120px]"
+                  placeholder="详细的人格设定，指导 AI 如何回复..."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-500 uppercase">模式</label>
+                  <select 
+                    value={newPersona.mode}
+                    onChange={e => setNewPersona({...newPersona, mode: Number(e.target.value)})}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none"
+                  >
+                    <option value={1}>自定义</option>
+                    <option value={2}>模拟</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-500 uppercase">头像 URL (可选)</label>
+                  <input 
+                    value={newPersona.avatar}
+                    onChange={e => setNewPersona({...newPersona, avatar: e.target.value})}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/50 outline-none"
+                    placeholder="https://..."
+                  />
+                </div>
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setShowCreatePersona(false)}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-zinc-800 text-sm font-medium hover:bg-zinc-800 transition-colors"
+                >
+                  取消
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-sm font-medium hover:bg-blue-500 transition-colors"
+                >
+                  立即创建
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
