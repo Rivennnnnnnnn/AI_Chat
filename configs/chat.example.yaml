@@ -1,0 +1,7 @@
+DeepSeek:
+  model: deepseek-chat
+  api_key: "your-deepseek-api-key"
+  base_url: "https://api.deepseek.com"
+  embedding_model: "text-embedding-v4"
+  embedding_api_key: "your-embedding-api-key"
+  embedding_base_url: "https://dashscope.aliyuncs.com/compatible-mode"

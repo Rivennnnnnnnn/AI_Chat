@@ -1,0 +1,6 @@
+common:
+  security:
+    authorizationEnabled: false
+    defaultRootPassword: "Milvus"
+proxy:
+  port: 19530

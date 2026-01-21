@@ -7,3 +7,11 @@ type DeepSeekChatModel struct {
 }
 
 var DeepSeekChatConfig DeepSeekChatModel
+
+type DeepSeekEmbeddingModel struct {
+	Model   string `json:"model"`
+	BaseURL string `json:"base_url"`
+	APIKey  string `json:"api_key"`
+}
+
+var DeepSeekEmbeddingConfig DeepSeekEmbeddingModel

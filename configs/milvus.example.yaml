@@ -1,0 +1,8 @@
+milvus:
+  address: "localhost:19530"
+  username: "root"
+  password: "Milvus"
+  database: ""
+  collection: "memories"
+  dimension: 1536
+  metric_type: "COSINE"

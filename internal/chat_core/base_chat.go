@@ -7,14 +7,15 @@ import (
 
 	"github.com/cloudwego/eino-ext/components/model/deepseek"
 	"github.com/cloudwego/eino/components/prompt"
+	"github.com/cloudwego/eino/components/tool"
 	_ "github.com/cloudwego/eino/components/tool"
-	_ "github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gin-gonic/gin"
 )
 
-func Chat(c *gin.Context, query string, history []model.Message, system_prompt string) (string, error) {
+func Chat(c *gin.Context, query string, history []model.Message, system_prompt string, tools ...tool.BaseTool) (string, error) {
 	cm, err := deepseek.NewChatModel(c, &deepseek.ChatModelConfig{
 		APIKey:  ai_config.DeepSeekChatConfig.APIKey,
 		Model:   ai_config.DeepSeekChatConfig.Model,
@@ -24,9 +25,14 @@ func Chat(c *gin.Context, query string, history []model.Message, system_prompt s
 	// tools := compose.ToolsNodeConfig{
 	// 	Tools: []tool.BaseTool{mytool},
 	// }
-	agent, err := react.NewAgent(c, &react.AgentConfig{
+	toolsConfig := compose.ToolsNodeConfig{}
+	if len(tools) > 0 {
+		toolsConfig.Tools = tools
+	}
+	reactAgent, err := react.NewAgent(c, &react.AgentConfig{
 		ToolCallingModel: cm,
 		MaxStep:          5,
+		ToolsConfig:      toolsConfig,
 	})
 	if err != nil {
 		return "Agent创建出错", err
@@ -71,7 +77,7 @@ func Chat(c *gin.Context, query string, history []model.Message, system_prompt s
 	if err != nil {
 		return "格式化出错，请检查格式", err
 	}
-	resp, err := agent.Generate(c, messages)
+	resp, err := reactAgent.Generate(c, messages)
 	if err != nil {
 		return "生成出错，请检查配置文件或网络", err
 	}

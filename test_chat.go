@@ -21,7 +21,8 @@ func main() {
 	fmt.Printf("登录成功, SessionId: %s\n", sessionId)
 
 	// 2. 创建对话
-	convId := createConversation(sessionId, "测试对话")
+	personaId := "per:YOUR_PERSONA_ID"
+	convId := createConversation(sessionId, "测试对话", personaId)
 	if convId == "" {
 		fmt.Println("创建对话失败")
 		return
@@ -53,9 +54,10 @@ func login(username, password string) string {
 	return ""
 }
 
-func createConversation(sessionId, title string) string {
+func createConversation(sessionId, title, personaId string) string {
 	data, _ := json.Marshal(map[string]string{
-		"title": title,
+		"title":     title,
+		"personaId": personaId,
 	})
 	req, _ := http.NewRequest("POST", baseURL+"/ai/create-conversation", bytes.NewBuffer(data))
 	req.Header.Set("SessionId", sessionId)

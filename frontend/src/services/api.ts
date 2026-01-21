@@ -31,8 +31,8 @@ api.interceptors.response.use(
 
 export const chatApi = {
   // 创建对话
-  createConversation: (title: string) => 
-    api.post('/ai/create-conversation', { title }),
+  createConversation: (title: string, personaId: string) => 
+    api.post('/ai/create-conversation', { title, personaId }),
   
   // 发送消息 (与人格对话)
   sendMessage: (query: string, conversationId: string, personaId: string) => 
@@ -55,6 +55,22 @@ export const personaApi = {
   // 获取人格列表
   getPersonas: () =>
     api.get('/persona/list'),
+
+  // 获取人格记忆列表
+  getMemories: (personaId: string) =>
+    api.get(`/persona/${personaId}/memory/list`),
+
+  // 手动创建记忆
+  createMemory: (personaId: string, data: { type: string, content: string }) =>
+    api.post(`/persona/${personaId}/memory/create`, data),
+
+  // 更新记忆
+  updateMemory: (personaId: string, memoryId: string, content: string) =>
+    api.put(`/persona/${personaId}/memory/${memoryId}`, { content }),
+
+  // 删除记忆
+  deleteMemory: (personaId: string, memoryId: string) =>
+    api.delete(`/persona/${personaId}/memory/${memoryId}`),
 };
 
 export default api;

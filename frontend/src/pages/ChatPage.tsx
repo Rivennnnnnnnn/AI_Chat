@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { LogOut, Send, Bot, User, Settings, TestTube, PlusCircle, Loader2, MessageSquare, X } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { LogOut, Send, Bot, User, Settings, TestTube, PlusCircle, Loader2, MessageSquare, X, Brain, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import api, { chatApi, personaApi } from '../services/api';
@@ -30,6 +30,16 @@ interface Persona {
   avatar: string;
 }
 
+interface Memory {
+  id: string;
+  type: string;
+  content: string;
+  keywords: string;
+  source: string;
+  status: string;
+  createdAt: string;
+}
+
 const ChatPage: React.FC = () => {
   const { username, clearSession } = useAuthStore();
   const navigate = useNavigate();
@@ -38,6 +48,8 @@ const ChatPage: React.FC = () => {
   
   // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
+  const [displayedMessages, setDisplayedMessages] = useState<Message[]>([]);
+  const [isTypingSimulated, setIsTypingSimulated] = useState(false);
   const [input, setInput] = useState('');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -59,9 +71,115 @@ const ChatPage: React.FC = () => {
     avatar: ''
   });
 
+  // Memory state
+  const [memories, setMemories] = useState<Memory[]>([]);
+  const [isLoadingMemories, setIsLoadingMemories] = useState(false);
+  const [showMemories, setShowMemories] = useState(false);
+  const [newMemory, setNewMemory] = useState({ type: 'fact', content: '' });
+  const [isCreatingMemory, setIsCreatingMemory] = useState(false);
+
+  const skipTypingAnimationRef = useRef(false);
+  const typingTimeoutsRef = useRef<number[]>([]);
+  const lastAnimatedMessageIdRef = useRef<string | null>(null);
+
+  const splitContent = (content: string) =>
+    content
+      .split('\n')
+      .map(part => part.trim())
+      .filter(Boolean);
+
+  const expandMessages = (source: Message[]) => {
+    const expanded: Message[] = [];
+    source.forEach((msg, index) => {
+      if (msg.role !== 'assistant') {
+        expanded.push(msg);
+        return;
+      }
+      const parts = splitContent(msg.content);
+      if (parts.length === 0) {
+        expanded.push(msg);
+        return;
+      }
+      parts.forEach((part, partIndex) => {
+        expanded.push({
+          ...msg,
+          id: `${msg.id || index}-${partIndex}`,
+          content: part,
+        });
+      });
+    });
+    return expanded;
+  };
+
+  const displayMessages = useMemo(() => displayedMessages, [displayedMessages]);
+
   // Auto scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [displayMessages]);
+
+  useEffect(() => {
+    typingTimeoutsRef.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+    typingTimeoutsRef.current = [];
+
+    if (messages.length === 0) {
+      setDisplayedMessages([]);
+      setIsTypingSimulated(false);
+      lastAnimatedMessageIdRef.current = null;
+      return;
+    }
+
+    if (skipTypingAnimationRef.current) {
+      skipTypingAnimationRef.current = false;
+      setDisplayedMessages(expandMessages(messages));
+      setIsTypingSimulated(false);
+      lastAnimatedMessageIdRef.current = messages[messages.length - 1]?.id || null;
+      return;
+    }
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.role !== 'assistant' || lastMessage.id === lastAnimatedMessageIdRef.current) {
+      setDisplayedMessages(expandMessages(messages));
+      setIsTypingSimulated(false);
+      return;
+    }
+
+    const baseMessages = messages.slice(0, -1);
+    const baseExpanded = expandMessages(baseMessages);
+    setDisplayedMessages(baseExpanded);
+
+    const parts = splitContent(lastMessage.content);
+    if (parts.length === 0) {
+      setDisplayedMessages(expandMessages(messages));
+      setIsTypingSimulated(false);
+      lastAnimatedMessageIdRef.current = lastMessage.id;
+      return;
+    }
+
+    setIsTypingSimulated(true);
+    const baseDelay = 420;
+    const jitter = 120;
+    let totalDelay = 0;
+
+    parts.forEach((part, partIndex) => {
+      const delay = baseDelay + Math.floor(Math.random() * jitter);
+      totalDelay += delay;
+      const timeoutId = window.setTimeout(() => {
+        setDisplayedMessages(prev => [
+          ...prev,
+          {
+            ...lastMessage,
+            id: `${lastMessage.id}-${partIndex}`,
+            content: part,
+          },
+        ]);
+        if (partIndex === parts.length - 1) {
+          setIsTypingSimulated(false);
+          lastAnimatedMessageIdRef.current = lastMessage.id;
+        }
+      }, totalDelay);
+      typingTimeoutsRef.current.push(timeoutId);
+    });
   }, [messages]);
 
   // Load conversations and personas on mount
@@ -99,6 +217,67 @@ const ChatPage: React.FC = () => {
     }
   };
 
+  const fetchMemories = async (personaId: string) => {
+    setIsLoadingMemories(true);
+    try {
+      const res = await personaApi.getMemories(personaId);
+      if (res.data.code === 0) {
+        setMemories(res.data.data.memories || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch memories', err);
+    } finally {
+      setIsLoadingMemories(false);
+    }
+  };
+
+  const handleRefreshMemories = async () => {
+    if (!selectedPersonaId) return;
+    await fetchMemories(selectedPersonaId);
+  };
+
+  const handleDeleteMemory = async (memoryId: string) => {
+    if (!selectedPersonaId) return;
+    try {
+      const res = await personaApi.deleteMemory(selectedPersonaId, memoryId);
+      if (res.data.code === 0) {
+        setMemories(prev => prev.filter(m => m.id !== memoryId));
+      }
+    } catch (err) {
+      console.error('Failed to delete memory', err);
+    }
+  };
+
+  const handleCreateMemory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPersonaId || !newMemory.content.trim()) return;
+    setIsCreatingMemory(true);
+    try {
+      const res = await personaApi.createMemory(selectedPersonaId, {
+        type: newMemory.type,
+        content: newMemory.content.trim(),
+      });
+      if (res.data.code === 0) {
+        setMemories(prev => [res.data.data, ...prev]);
+        setNewMemory({ type: newMemory.type, content: '' });
+        setTestResult('记忆创建成功！');
+      } else {
+        setTestResult(`创建失败: ${res.data.message}`);
+      }
+    } catch (err: any) {
+      setTestResult(`请求失败: ${err.message}`);
+    } finally {
+      setIsCreatingMemory(false);
+      setTimeout(() => setTestResult(null), 3000);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPersonaId && showMemories) {
+      fetchMemories(selectedPersonaId);
+    }
+  }, [selectedPersonaId, showMemories]);
+
   const handleCreatePersona = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -120,6 +299,7 @@ const ChatPage: React.FC = () => {
     if (conv.id === conversationId) return;
     
     setIsLoadingHistory(true);
+    skipTypingAnimationRef.current = true;
     setConversationId(conv.id);
     if (conv.personaId) {
       setSelectedPersonaId(conv.personaId);
@@ -156,22 +336,36 @@ const ChatPage: React.FC = () => {
       return;
     }
 
+    const existingConv = conversations.find(conv => conv.personaId === selectedPersonaId);
+    if (existingConv) {
+      await loadConversationHistory(existingConv);
+      setTestResult('已切换到该人格的唯一会话');
+      setTimeout(() => setTestResult(null), 3000);
+      return;
+    }
+
     setIsCreatingConv(true);
     const selectedPersona = personas.find(p => p.id === selectedPersonaId);
     const title = `与 ${selectedPersona?.name || 'AI'} 的新对话`;
 
     try {
-      const res = await chatApi.createConversation(title);
+      const res = await chatApi.createConversation(title, selectedPersonaId);
       if (res.data.code === 0) {
-        const newConv: Conversation = {
-          id: res.data.data.conversationId,
-          title: title,
-          personaId: selectedPersonaId,
-          createdAt: new Date().toISOString()
-        };
-        setConversations(prev => [newConv, ...prev]);
-        setConversationId(newConv.id);
-        setMessages([]);
+        const newId = res.data.data.conversationId;
+        const existed = conversations.find(conv => conv.id === newId);
+        if (existed) {
+          await loadConversationHistory(existed);
+        } else {
+          const newConv: Conversation = {
+            id: newId,
+            title: title,
+            personaId: selectedPersonaId,
+            createdAt: new Date().toISOString()
+          };
+          setConversations(prev => [newConv, ...prev]);
+          setConversationId(newConv.id);
+          setMessages([]);
+        }
         setTestResult('会话创建成功！');
       } else {
         setTestResult(`创建失败: ${res.data.message}`);
@@ -195,26 +389,32 @@ const ChatPage: React.FC = () => {
     // If no conversation yet, create one first
     let currentConvId = conversationId;
     if (!currentConvId) {
-      setIsCreatingConv(true);
-      const selectedPersona = personas.find(p => p.id === selectedPersonaId);
-      const title = `与 ${selectedPersona?.name || 'AI'} 的新对话`;
-      try {
-        const res = await chatApi.createConversation(title);
-        if (res.data.code === 0) {
-          currentConvId = res.data.data.conversationId;
-          setConversationId(currentConvId);
-          fetchConversations();
-        } else {
-          setTestResult(`创建会话失败: ${res.data.message}`);
+      const existingConv = conversations.find(conv => conv.personaId === selectedPersonaId);
+      if (existingConv) {
+        await loadConversationHistory(existingConv);
+        currentConvId = existingConv.id;
+      } else {
+        setIsCreatingConv(true);
+        const selectedPersona = personas.find(p => p.id === selectedPersonaId);
+        const title = `与 ${selectedPersona?.name || 'AI'} 的新对话`;
+        try {
+          const res = await chatApi.createConversation(title, selectedPersonaId);
+          if (res.data.code === 0) {
+            currentConvId = res.data.data.conversationId;
+            setConversationId(currentConvId);
+            fetchConversations();
+          } else {
+            setTestResult(`创建会话失败: ${res.data.message}`);
+            setIsCreatingConv(false);
+            return;
+          }
+        } catch (err: any) {
+          setTestResult(`请求失败: ${err.message}`);
           setIsCreatingConv(false);
           return;
+        } finally {
+          setIsCreatingConv(false);
         }
-      } catch (err: any) {
-        setTestResult(`请求失败: ${err.message}`);
-        setIsCreatingConv(false);
-        return;
-      } finally {
-        setIsCreatingConv(false);
       }
     }
 
@@ -375,106 +575,232 @@ const ChatPage: React.FC = () => {
                 ? conversations.find(c => c.id === conversationId)?.title || `会话: ${conversationId.slice(0, 8)}...`
                 : '开始新的对话'}
             </h1>
-            {(isSending || isLoadingHistory) && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
+            {isLoadingHistory && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
           </div>
-          <button className="p-2 text-zinc-400 hover:text-white transition-colors">
-            <Settings className="h-5 w-5" />
-          </button>
+          {(isSending || isTypingSimulated) && (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800/60 border border-zinc-700 text-xs text-zinc-300 animate-in fade-in duration-300">
+              <span>对方正在输入</span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:-0.2s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce [animation-delay:-0.1s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" />
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            {selectedPersonaId && (
+              <button 
+                onClick={() => setShowMemories(!showMemories)}
+                className={`p-2 rounded-lg transition-colors ${showMemories ? 'bg-blue-600/20 text-blue-400' : 'text-zinc-400 hover:text-white'}`}
+                title="查看 AI 记忆"
+              >
+                <Brain className="h-5 w-5" />
+              </button>
+            )}
+            <button className="p-2 text-zinc-400 hover:text-white transition-colors">
+              <Settings className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
         {/* Messages area */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          {isLoadingHistory ? (
-            <div className="h-full flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
-              <div className="h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center shadow-xl mb-4">
-                <Bot className="h-10 w-10 text-blue-500" />
+        <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar flex">
+          <div className={`flex-1 transition-all duration-300 ${showMemories ? 'mr-80' : ''}`}>
+            {isLoadingHistory ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
               </div>
-              <div className="max-w-md">
-                <h2 className="text-2xl font-bold mb-2">你好, {username}!</h2>
-                <p className="text-zinc-500">
-                  我是你的 AI 助手。请先从侧边栏选择或创建一个 **AI 人格**，然后开始对话。
-                </p>
+            ) : messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
+                <div className="h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center shadow-xl mb-4">
+                  <Bot className="h-10 w-10 text-blue-500" />
+                </div>
+                <div className="max-w-md">
+                  <h2 className="text-2xl font-bold mb-2">你好, {username}!</h2>
+                  <p className="text-zinc-500">
+                    我是你的 AI 助手。请先从侧边栏选择或创建一个 **AI 人格**，然后开始对话。
+                  </p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="max-w-4xl mx-auto space-y-6">
-              {messages.map((msg, index) => (
-                <div key={msg.id || index} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    msg.role === 'user' ? 'bg-blue-600' : 'bg-zinc-800 border border-zinc-700'
-                  }`}>
-                    {msg.role === 'user' ? <User className="h-5 w-5 text-white" /> : <Bot className="h-5 w-5 text-blue-400" />}
+            ) : (
+              <div className="max-w-4xl mx-auto space-y-6">
+                {displayMessages.map((msg, index) => (
+                  <div key={msg.id || index} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      msg.role === 'user' ? 'bg-blue-600' : 'bg-zinc-800 border border-zinc-700'
+                    }`}>
+                      {msg.role === 'user' ? <User className="h-5 w-5 text-white" /> : <Bot className="h-5 w-5 text-blue-400" />}
+                    </div>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
+                      msg.role === 'user' 
+                        ? 'bg-blue-600 text-white rounded-tr-none' 
+                        : 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-none'
+                    }`}>
+                      {msg.role === 'assistant' ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            code({ node, inline, className, children, ...props }: any) {
+                              const match = /language-(\w+)/.exec(className || '');
+                              return !inline && match ? (
+                                <SyntaxHighlighter
+                                  style={vscDarkPlus}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  {...props}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
+                            ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
+                            li: ({ children }) => <li className="mb-1">{children}</li>,
+                            a: ({ children, href }) => <a href={href} className="text-blue-400 underline" target="_blank" rel="noreferrer">{children}</a>,
+                            blockquote: ({ children }) => <blockquote className="border-l-4 border-zinc-700 pl-4 italic my-2">{children}</blockquote>,
+                            table: ({ children }) => (
+                              <div className="overflow-x-auto my-4 rounded-lg border border-zinc-800">
+                                <table className="w-full border-collapse text-left text-sm">
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+                            thead: ({ children }) => <thead className="bg-zinc-800/50 text-zinc-300">{children}</thead>,
+                            th: ({ children }) => <th className="px-4 py-2 border-b border-zinc-700 font-semibold">{children}</th>,
+                            td: ({ children }) => <td className="px-4 py-2 border-b border-zinc-800 text-zinc-400">{children}</td>,
+                            tr: ({ children }) => <tr className="even:bg-zinc-900/50 hover:bg-zinc-800/30 transition-colors last:border-0">{children}</tr>,
+                          }}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      ) : (
+                        msg.content
+                      )}
+                    </div>
                   </div>
-                  <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
-                    msg.role === 'user' 
-                      ? 'bg-blue-600 text-white rounded-tr-none' 
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-tl-none'
-                  }`}>
-                    {msg.role === 'assistant' ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code({ node, inline, className, children, ...props }: any) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return !inline && match ? (
-                              <SyntaxHighlighter
-                                style={vscDarkPlus}
-                                language={match[1]}
-                                PreTag="div"
-                                {...props}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={className} {...props}>
-                                {children}
-                              </code>
-                            );
-                          },
-                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                          ul: ({ children }) => <ul className="list-disc ml-4 mb-2">{children}</ul>,
-                          ol: ({ children }) => <ol className="list-decimal ml-4 mb-2">{children}</ol>,
-                          li: ({ children }) => <li className="mb-1">{children}</li>,
-                          a: ({ children, href }) => <a href={href} className="text-blue-400 underline" target="_blank" rel="noreferrer">{children}</a>,
-                          blockquote: ({ children }) => <blockquote className="border-l-4 border-zinc-700 pl-4 italic my-2">{children}</blockquote>,
-                          table: ({ children }) => (
-                            <div className="overflow-x-auto my-4 rounded-lg border border-zinc-800">
-                              <table className="w-full border-collapse text-left text-sm">
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          thead: ({ children }) => <thead className="bg-zinc-800/50 text-zinc-300">{children}</thead>,
-                          th: ({ children }) => <th className="px-4 py-2 border-b border-zinc-700 font-semibold">{children}</th>,
-                          td: ({ children }) => <td className="px-4 py-2 border-b border-zinc-800 text-zinc-400">{children}</td>,
-                          tr: ({ children }) => <tr className="even:bg-zinc-900/50 hover:bg-zinc-800/30 transition-colors last:border-0">{children}</tr>,
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Memory Sidebar */}
+          {showMemories && (
+            <aside className="w-80 border-l border-zinc-800 bg-zinc-900/30 fixed right-0 top-16 bottom-0 overflow-y-auto p-4 custom-scrollbar animate-in slide-in-from-right duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-blue-400" />
+                  <h3 className="font-bold">长期记忆</h3>
                 </div>
-              ))}
-              {isSending && (
-                <div className="flex gap-4">
-                  <div className="h-8 w-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                    <Bot className="h-5 w-5 text-blue-400" />
-                  </div>
-                  <div className="bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-2xl rounded-tl-none px-4 py-2 text-sm flex items-center gap-2">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    AI 正在思考...
-                  </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleRefreshMemories}
+                    className="text-zinc-500 hover:text-white text-xs px-2 py-1 rounded border border-zinc-800 hover:border-zinc-700"
+                  >
+                    刷新
+                  </button>
+                  <button onClick={() => setShowMemories(false)} className="text-zinc-500 hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
+              </div>
+
+              <div className="text-xs text-zinc-500 mb-4">
+                当前人格：{personas.find(p => p.id === selectedPersonaId)?.name || '未选择'}（仅展示该人格的记忆）
+              </div>
+
+              <form onSubmit={handleCreateMemory} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 mb-4 space-y-3">
+                <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">手动添加记忆</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={newMemory.type}
+                    onChange={(e) => setNewMemory({ ...newMemory, type: e.target.value })}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/50 outline-none"
+                  >
+                    <option value="fact">事实 fact</option>
+                    <option value="preference">偏好 preference</option>
+                    <option value="event">事件 event</option>
+                    <option value="emotion">情绪 emotion</option>
+                    <option value="relationship">关系 relationship</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={!newMemory.content.trim() || isCreatingMemory}
+                    className="w-full px-3 py-2 rounded-lg bg-blue-600 text-xs font-medium hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isCreatingMemory ? <Loader2 className="h-3 w-3 animate-spin" /> : <PlusCircle className="h-3 w-3" />}
+                    添加
+                  </button>
+                </div>
+                <textarea
+                  value={newMemory.content}
+                  onChange={(e) => setNewMemory({ ...newMemory, content: e.target.value })}
+                  placeholder="写入该人格需要记住的信息..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500/50 outline-none min-h-[70px]"
+                />
+              </form>
+              
+              <div className="space-y-4">
+                {isLoadingMemories ? (
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-zinc-500" /></div>
+                ) : memories.length === 0 ? (
+                  <div className="text-center py-12 px-4">
+                    <div className="bg-zinc-800/50 rounded-full h-12 w-12 flex items-center justify-center mx-auto mb-3">
+                      <Brain className="h-6 w-6 text-zinc-600" />
+                    </div>
+                    <p className="text-sm text-zinc-500 italic">暂无记忆点，通过持续对话或手动添加来丰富 AI 的认知。</p>
+                  </div>
+                ) : (
+                  memories.map(m => (
+                    <div key={m.id} className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3 space-y-2 group hover:border-zinc-700 transition-colors">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${
+                            m.type === 'fact' ? 'bg-blue-500/10 text-blue-400' :
+                            m.type === 'preference' ? 'bg-purple-500/10 text-purple-400' :
+                            m.type === 'event' ? 'bg-orange-500/10 text-orange-400' :
+                            m.type === 'emotion' ? 'bg-pink-500/10 text-pink-400' :
+                            m.type === 'relationship' ? 'bg-emerald-500/10 text-emerald-400' :
+                            'bg-zinc-500/10 text-zinc-400'
+                          }`}>
+                            {m.type}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            m.source === 'manual' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-cyan-500/10 text-cyan-400'
+                          }`}>
+                            {m.source === 'manual' ? 'manual' : 'auto'}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            m.status === 'active' ? 'bg-zinc-500/10 text-zinc-300' : 'bg-amber-500/10 text-amber-400'
+                          }`}>
+                            {m.status}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteMemory(m.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1 text-zinc-600 hover:text-red-400 transition-all"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <p className="text-sm text-zinc-300 leading-relaxed">{m.content}</p>
+                      {m.keywords && (
+                        <div className="flex flex-wrap gap-1">
+                          {m.keywords.split(',').map(kw => (
+                            <span key={kw} className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">#{kw.trim()}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </aside>
           )}
 
           {testResult && (

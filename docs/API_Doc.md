@@ -112,6 +112,67 @@
 }
 ```
 
+### 3. 获取人格记忆列表 [已完成]
+获取指定人格的长期记忆（仅当前用户）。
+
+- **接口地址**: `/persona/{personaId}/memory/list`
+- **请求方法**: `GET`
+
+- **响应示例 (成功)**:
+```json
+{
+    "code": 0,
+    "message": "success",
+    "data": {
+        "memories": [
+            {
+                "id": "mem:xxxx",
+                "persona_id": "per:xxxx",
+                "user_id": 1,
+                "type": "preference",
+                "content": "用户喜欢深色主题",
+                "keywords": "深色主题,偏好",
+                "source": "auto",
+                "status": "active",
+                "hit_count": 0,
+                "last_hit_at": null,
+                "created_at": "2026-01-20T10:00:00Z",
+                "updated_at": "2026-01-20T10:00:00Z"
+            }
+        ]
+    }
+}
+```
+
+### 4. 手动创建记忆 [已完成]
+在指定人格下手动创建一条记忆。
+
+- **接口地址**: `/persona/{personaId}/memory/create`
+- **请求方法**: `POST`
+- **请求参数 (JSON)**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| type | string | 是 | 类型：fact/preference/event/emotion/relationship |
+| content | string | 是 | 记忆内容 |
+
+### 5. 更新记忆内容 [已完成]
+更新指定记忆的内容。
+
+- **接口地址**: `/persona/{personaId}/memory/{memoryId}`
+- **请求方法**: `PUT`
+- **请求参数 (JSON)**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| content | string | 是 | 记忆内容 |
+
+### 6. 删除记忆 [已完成]
+软删除指定记忆。
+
+- **接口地址**: `/persona/{personaId}/memory/{memoryId}`
+- **请求方法**: `DELETE`
+
 ---
 
 ## AI 聊天接口 (AI Chat) [已对接]
@@ -128,6 +189,9 @@
 | 参数名 | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- |
 | title | string | 是 | 对话标题 |
+| personaId | string | 是 | AI 人格 ID（同一人格仅对应一个会话） |
+
+> 说明：如果该 `personaId` 已存在会话，会直接返回该会话 ID，不再新建。
 
 - **响应示例 (成功)**:
 ```json
@@ -153,6 +217,9 @@
 | conversationId | string | 是 | 对话 ID |
 | personaId | string | 是 | AI 人格 ID |
 
+- **上下文策略**: 仅使用最近 30 轮对话作为 LLM 上下文。
+- **回复格式**: 回复内容可能包含 `\n` 作为分段符号，用于前端模拟逐条消息显示。
+
 - **响应示例 (成功)**:
 ```json
 {
@@ -169,6 +236,17 @@
 
 - **接口地址**: `/ai/conversations`
 - **请求方法**: `GET`
+
+### 4. 获取对话消息历史 [已对接]
+获取指定对话的消息历史记录。
+
+- **接口地址**: `/ai/conversation-messages`
+- **请求方法**: `POST`
+- **请求参数 (JSON)**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| conversationId | string | 是 | 对话 ID |
 
 ---
 

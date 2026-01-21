@@ -19,6 +19,7 @@ logs/*.log
 configs/mysql.yaml
 configs/redis.yaml
 configs/chat.yaml
+configs/milvus.yaml
 
 # --- 依赖管理 ---
 # Go 的依赖通常不提交 vendor 目录（除非你明确使用 vendor 模式）

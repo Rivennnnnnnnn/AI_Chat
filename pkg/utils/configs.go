@@ -26,9 +26,20 @@ type RedisConfig struct {
 	DB       int
 }
 
+type MilvusConfig struct {
+	Address    string
+	Username   string
+	Password   string
+	Database   string
+	Collection string
+	Dimension  int
+	MetricType string
+}
+
 type Config struct {
-	Mysql MysqlConfig
-	Redis RedisConfig
+	Mysql  MysqlConfig
+	Redis  RedisConfig
+	Milvus MilvusConfig
 }
 
 func (c *Config) GetMysqlConfig() MysqlConfig {
@@ -43,12 +54,19 @@ func (c *Config) GetRedisConfig() RedisConfig {
 func (c *Config) SetRedisConfig(redisConfig RedisConfig) {
 	c.Redis = redisConfig
 }
+func (c *Config) GetMilvusConfig() MilvusConfig {
+	return c.Milvus
+}
+func (c *Config) SetMilvusConfig(milvusConfig MilvusConfig) {
+	c.Milvus = milvusConfig
+}
 
 // 全局变量声明
 var config_names []string = []string{
 	"mysql",
 	"redis",
 	"chat",
+	"milvus",
 }
 var config_names_flag map[string]bool = map[string]bool{}
 
@@ -106,11 +124,35 @@ func InitConfig() error {
 		case "chat":
 			viper.SetDefault("DeepSeek.base_url", "https://api.deepseek.com")
 			viper.SetDefault("DeepSeek.model", "deepseek-chat")
+			viper.SetDefault("DeepSeek.embedding_base_url", viper.GetString("DeepSeek.base_url"))
+			viper.SetDefault("DeepSeek.embedding_model", "deepseek-embedding")
+			viper.SetDefault("DeepSeek.embedding_api_key", viper.GetString("DeepSeek.api_key"))
 			ai_config.DeepSeekChatConfig = ai_config.DeepSeekChatModel{
 				Model:   viper.GetString("DeepSeek.model"),
 				BaseURL: viper.GetString("DeepSeek.base_url"),
 				APIKey:  viper.GetString("DeepSeek.api_key"),
 			}
+			ai_config.DeepSeekEmbeddingConfig = ai_config.DeepSeekEmbeddingModel{
+				Model:   viper.GetString("DeepSeek.embedding_model"),
+				BaseURL: viper.GetString("DeepSeek.embedding_base_url"),
+				APIKey:  viper.GetString("DeepSeek.embedding_api_key"),
+			}
+		case "milvus":
+			viper.SetDefault("milvus.collection", "memories")
+			viper.SetDefault("milvus.metric_type", "COSINE")
+			milvusConfig := MilvusConfig{
+				Address:    viper.GetString("milvus.address"),
+				Username:   viper.GetString("milvus.username"),
+				Password:   viper.GetString("milvus.password"),
+				Database:   viper.GetString("milvus.database"),
+				Collection: viper.GetString("milvus.collection"),
+				Dimension:  viper.GetInt("milvus.dimension"),
+				MetricType: viper.GetString("milvus.metric_type"),
+			}
+			if milvusConfig.Address == "" || milvusConfig.Collection == "" {
+				return errors.New("milvus配置文件错误: 请检查配置文件是否正确,必要配置项（address,collection）不能为空\n")
+			}
+			Config_Instance.SetMilvusConfig(milvusConfig)
 		}
 	}
 	return nil

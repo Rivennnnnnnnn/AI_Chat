@@ -2,7 +2,9 @@ package app
 
 import (
 	"AI_Chat/internal/handler"
+	"AI_Chat/internal/memory"
 	"AI_Chat/internal/middleware"
+	"AI_Chat/internal/model"
 	"AI_Chat/internal/repository"
 	"AI_Chat/pkg/db"
 	"AI_Chat/pkg/utils"
@@ -18,6 +20,7 @@ type app struct {
 	testHandler        *handler.TestHandler
 	chatHandler        *handler.ChatHandler
 	personaHandler     *handler.PersonaHandler
+	memoryHandler      *handler.MemoryHandler
 	privateInterceptor []gin.HandlerFunc
 }
 
@@ -52,6 +55,15 @@ func InitRouter() *gin.Engine {
 			{
 				personaGroup.POST("/create", App.personaHandler.CreatePersona)
 				personaGroup.GET("/list", App.personaHandler.GetPersonas)
+				
+				// 记忆管理路由
+				memoryGroup := personaGroup.Group("/:personaId/memory")
+				{
+					memoryGroup.POST("/create", App.memoryHandler.CreateMemory)
+					memoryGroup.GET("/list", App.memoryHandler.GetMemories)
+					memoryGroup.PUT("/:memoryId", App.memoryHandler.UpdateMemory)
+					memoryGroup.DELETE("/:memoryId", App.memoryHandler.DeleteMemory)
+				}
 			}
 		}
 
@@ -80,12 +92,19 @@ func Init() {
 		utils.Log.Error("初始化Mysql连接失败", zap.Error(err))
 		return
 	}
+	// 数据库迁移
+	db.DB.AutoMigrate(&model.Memory{})
 	// 假设 InitDB 返回了 *gorm.DB 或 *sql.DB，这里可以处理关闭逻辑
 	// sqlDB, _ := database.DB()
 	// defer sqlDB.Close()
 	err = db.InitRedis(utils.Config_Instance.GetRedisConfig())
 	if err != nil {
 		utils.Log.Error("初始化Redis连接失败", zap.Error(err))
+		return
+	}
+	err = db.InitMilvus(utils.Config_Instance.GetMilvusConfig())
+	if err != nil {
+		utils.Log.Error("初始化Milvus连接失败", zap.Error(err))
 		return
 	}
 	// 4. 初始化雪花算法
@@ -99,15 +118,27 @@ func Init() {
 	userSessionRepository := repository.NewUserSessionRepository(db.RedisClient)
 	conversationRepository := repository.NewConversationRepository(db.DB)
 	personaRepository := repository.NewPersonaRepository(db.DB)
+	memoryRepository := repository.NewMemoryRepository(db.DB)
+
+	milvusConfig := utils.Config_Instance.GetMilvusConfig()
+	milvusStore := memory.NewMilvusStore(db.MilvusClient, memory.MilvusStoreConfig{
+		Collection: milvusConfig.Collection,
+		Dimension:  milvusConfig.Dimension,
+		MetricType: milvusConfig.MetricType,
+	})
+	memoryService := memory.NewMemoryService(memoryRepository, db.RedisClient, milvusStore)
 
 	authHandler := handler.NewAuthHandler(userBaseRepository, userSessionRepository)
 	testHandler := handler.NewTestHandler()
-	chatHandler := handler.NewChatHandler(conversationRepository, personaRepository)
+	chatHandler := handler.NewChatHandler(conversationRepository, personaRepository, memoryService)
 	personaHandler := handler.NewPersonaHandler(personaRepository)
+	memoryHandler := handler.NewMemoryHandler(memoryRepository, personaRepository, memoryService)
+	
 	App.authHandler = authHandler
 	App.testHandler = testHandler
 	App.chatHandler = chatHandler
 	App.personaHandler = personaHandler
+	App.memoryHandler = memoryHandler
 	//初始化Interceptor
 
 	privateInterceptor := []gin.HandlerFunc{

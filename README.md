@@ -6,14 +6,15 @@
 
 - **后端**: Go 1.21+, Gin, GORM, Go-Redis, Eino (AI SDK)
 - **前端**: React 18, Vite, Tailwind CSS, Lucide React, Zustand
-- **数据库**: MySQL 8.0, Redis 7.0
+- **数据库**: MySQL 8.0, Redis 7.0, Milvus (向量检索)
 - **AI 模型**: DeepSeek-Chat (通过 API 接入)
 
 ## 📦 功能特性
 
 - [x] **用户系统**: 注册、登录、Session 鉴权、登出。
-- [x] **对话管理**: 自动创建会话、保存历史消息、多会话隔离。
-- [x] **AI 聊天**: 接入 DeepSeek 模型，支持系统提示词（System Prompt）和上下文理解。
+- [x] **对话管理**: 每个人格唯一会话，自动创建并保存历史消息。
+- [x] **AI 聊天**: 接入 DeepSeek 模型，支持系统提示词与最近 30 轮上下文。
+- [x] **记忆检索**: 优先 Milvus 向量检索，失败或无结果回退数据库。
 - [x] **现代 UI**: 基于 Tailwind 设计的深色模式界面，自适应滚动和响应式布局。
 - [x] **调试工具**: 接口连通性测试按钮、后端独立测试脚本。
 
@@ -26,7 +27,8 @@
 
 ### 2. 后端启动
 1. 进入项目根目录。
-2. 在 `configs/` 下配置 `mysql.yaml`, `redis.yaml`, `chat.yaml`。
+2. 在 `configs/` 下配置 `mysql.yaml`, `redis.yaml`, `chat.yaml`, `milvus.yaml`。
+   - 可参考 `configs/*.example.yaml` 示例文件，复制后再填写实际值。
 3. 运行服务：
    ```bash
    go run main.go

@@ -23,6 +23,14 @@ func (r *ConversationRepository) GetConversationById(id string) (*model.Conversa
 	}
 	return &conversation, nil
 }
+
+func (r *ConversationRepository) GetConversationByPersonaAndUser(personaId string, userId int64) (*model.Conversation, error) {
+	var conversation model.Conversation
+	if err := r.db.Where("persona_id = ? AND user_id = ?", personaId, userId).First(&conversation).Error; err != nil {
+		return nil, err
+	}
+	return &conversation, nil
+}
 func (r *ConversationRepository) GetConversationsByUserId(userId int64) ([]model.Conversation, error) {
 	var conversations []model.Conversation
 	if err := r.db.Where("user_id = ?", userId).Order("created_at DESC").Find(&conversations).Error; err != nil {
@@ -40,4 +48,8 @@ func (r *ConversationRepository) GetMessagesByConversationId(conversationId stri
 
 func (r *ConversationRepository) AddMessageToConversation(message *model.Message) error {
 	return r.db.Create(message).Error
+}
+
+func (r *ConversationRepository) UpdateConversation(conversation *model.Conversation) error {
+	return r.db.Save(conversation).Error
 }
