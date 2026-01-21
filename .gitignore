@@ -36,3 +36,6 @@ desktop.ini
 .cursor/
 *.swp
 *.exe_
+
+#缓存
+.volumes/
